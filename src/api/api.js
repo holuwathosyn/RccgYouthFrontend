@@ -4,7 +4,7 @@ import axios from "axios";
 // BASE API
 // ===========================
 const api = axios.create({
-  baseURL:  "https://api-rccgyouthgloryofgod.onrender.com/api",
+  baseURL: "https://api-rccgyouthgloryofgod.onrender.com/api",
   withCredentials: true,
 });
 
@@ -12,25 +12,28 @@ const api = axios.create({
 // REFRESH API
 // ===========================
 const refreshApi = axios.create({
-  baseURL:  "https://api-rccgyouthgloryofgod.onrender.com/api",
+  baseURL: "https://api-rccgyouthgloryofgod.onrender.com/api",
   withCredentials: true,
 });
 
 // ===========================
-// MEMORY TOKEN
+// MEMORY TOKEN (CRITICAL FOR ANDROID)
 // ===========================
-let accessToken = null;
+let memoryToken = null;
 
-export const setAccessToken = (token) => {
-  accessToken = token;
+// Named exactly what AuthContext expects
+export const setLocalAccessToken = (token) => {
+  memoryToken = token;
 };
 
-// attach token
+// Automatically attach the token header to EVERY outgoing request
 api.interceptors.request.use((config) => {
-  if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`;
+  if (memoryToken) {
+    config.headers.Authorization = `Bearer ${memoryToken}`;
   }
   return config;
+}, (error) => {
+  return Promise.reject(error);
 });
 
 // ===========================
@@ -60,6 +63,11 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
+    // Stop loops if the refresh path itself fails
+    if (original.url?.includes("/admin/refresh-token")) {
+      return Promise.reject(error);
+    }
+
     if (!error.response || error.response.status !== 401) {
       return Promise.reject(error);
     }
@@ -84,13 +92,14 @@ api.interceptors.response.use(
     try {
       const res = await refreshApi.post("/admin/refresh-token");
 
-      const newToken = res.data?.newAccessToken;
+      // Check your backend field name: should match what backend returns (newAccessToken)
+      const newToken = res.data?.newAccessToken || res.data?.accessToken;
 
       if (!newToken) {
         throw new Error("No access token returned");
       }
 
-      setAccessToken(newToken);
+      setLocalAccessToken(newToken);
 
       isRefreshing = false;
       processQueue(null, newToken);
@@ -102,7 +111,7 @@ api.interceptors.response.use(
       isRefreshing = false;
       processQueue(err, null);
 
-      setAccessToken(null);
+      setLocalAccessToken(null);
       localStorage.removeItem("isLoggedIn");
 
       return Promise.reject(err);
