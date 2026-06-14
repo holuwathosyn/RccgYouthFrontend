@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import api, { setLocalAccessToken } from "../api/api";
+import api, { setAccessToken } from "../api/api";
+import axios from "axios"; // Import standard axios for the silent reboot
 
 const AuthContext = createContext(null);
 
@@ -12,8 +13,8 @@ export const AuthProvider = ({ children }) => {
   // ======================
   const clearAuthData = () => {
     setAdmin(null);
-    setLocalAccessToken(null);
-    localStorage.removeItem("isLoggedIn"); // Clears optimization flag
+    setAccessToken(null);
+    localStorage.removeItem("isLoggedIn"); 
   };
 
   // ======================
@@ -28,14 +29,12 @@ export const AuthProvider = ({ children }) => {
         { withCredentials: true }
       );
 
-      // 🔥 CRITICAL HYBRID FIX FOR MOBILE:
-      // Grab the access token from JSON response and save to JavaScript memory
       if (res.data?.accessToken) {
-        setLocalAccessToken(res.data.accessToken);
+        setAccessToken(res.data.accessToken);
       }
 
       setAdmin(res.data.admin);
-      localStorage.setItem("isLoggedIn", "true"); // Save login marker
+      localStorage.setItem("isLoggedIn", "true"); 
 
       return res.data;
     } finally {
@@ -59,10 +58,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   // ======================
-  // CHECK AUTH (FIXED FOR ANDROID)
+  // CHECK AUTH (REFRESH PROOF FOR MOBILE)
   // ======================
   const checkAuth = async () => {
-    // Optimization: Skip API traffic if localStorage shows they never logged in
     if (!localStorage.getItem("isLoggedIn")) {
       clearAuthData();
       setLoading(false);
@@ -71,14 +69,32 @@ export const AuthProvider = ({ children }) => {
 
     setLoading(true);
     try {
+      // 1. SILENT REBOOT FOR MOBILE PHONE BROWSERS
+      // Since memory is wiped on refresh and cookies are blocked, we use a clean 
+      // direct instance call to fire a refresh token handshake first.
+      try {
+        const refreshResponse = await axios.post(
+          "https://onrender.com",
+          {},
+          { withCredentials: true }
+        );
+        
+        const freshToken = refreshResponse.data?.newAccessToken || refreshResponse.data?.accessToken;
+        if (freshToken) {
+          setAccessToken(freshToken); // Restores memory token instantly
+        }
+      } catch (refreshErr) {
+        // If the refresh cookie is truly dead or expired, let it fall through to catch block
+        console.log("Silent recovery skipped or unverified via cookies");
+      }
+
+      // 2. Now run the profile retrieval with headers restored
       const res = await api.get("/admin/me", {
         withCredentials: true,
       });
 
-      // 🔥 CRITICAL HYBRID FIX FOR MOBILE:
-      // Save the token returned by the fallback mechanism during app boot up
       if (res.data?.accessToken) {
-        setLocalAccessToken(res.data.accessToken);
+        setAccessToken(res.data.accessToken);
       }
 
       setAdmin(res.data.admin || null);
@@ -91,10 +107,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   // ==========================================
-  // GLOBAL INTERCEPTOR BINDING (SMOOTH ROUTING)
+  // GLOBAL INTERCEPTOR BINDING
   // ==========================================
   useEffect(() => {
-    // Safely clear UI state if the backend ever rejects a refresh token request down the line
     const responseInterceptor = api.interceptors.response.use(
       (response) => response,
       (error) => {
