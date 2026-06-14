@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import api, { setLocalAccessToken } from "../api/api.js"; // Matches the export above perfectly
+import api, { setLocalAccessToken } from "../api/api";
 
 const AuthContext = createContext(null);
 
@@ -13,7 +13,7 @@ export const AuthProvider = ({ children }) => {
   const clearAuthData = () => {
     setAdmin(null);
     setLocalAccessToken(null);
-    localStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("isLoggedIn"); // Clears optimization flag
   };
 
   // ======================
@@ -28,13 +28,14 @@ export const AuthProvider = ({ children }) => {
         { withCredentials: true }
       );
 
-      // Saves the token to memory for mobile safety
+      // 🔥 CRITICAL HYBRID FIX FOR MOBILE:
+      // Grab the access token from JSON response and save to JavaScript memory
       if (res.data?.accessToken) {
         setLocalAccessToken(res.data.accessToken);
       }
 
       setAdmin(res.data.admin);
-      localStorage.setItem("isLoggedIn", "true");
+      localStorage.setItem("isLoggedIn", "true"); // Save login marker
 
       return res.data;
     } finally {
@@ -58,9 +59,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   // ======================
-  // CHECK AUTH 
+  // CHECK AUTH (FIXED FOR ANDROID)
   // ======================
   const checkAuth = async () => {
+    // Optimization: Skip API traffic if localStorage shows they never logged in
     if (!localStorage.getItem("isLoggedIn")) {
       clearAuthData();
       setLoading(false);
@@ -73,13 +75,15 @@ export const AuthProvider = ({ children }) => {
         withCredentials: true,
       });
 
+      // 🔥 CRITICAL HYBRID FIX FOR MOBILE:
+      // Save the token returned by the fallback mechanism during app boot up
       if (res.data?.accessToken) {
         setLocalAccessToken(res.data.accessToken);
       }
 
       setAdmin(res.data.admin || null);
     } catch (error) {
-      console.error("Boot auth check failed:", error);
+      console.error("Boot-up auth check failed:", error);
       clearAuthData();
     } finally {
       setLoading(false);
@@ -87,9 +91,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   // ==========================================
-  // INITIAL RUN
+  // GLOBAL INTERCEPTOR BINDING (SMOOTH ROUTING)
   // ==========================================
   useEffect(() => {
+    // Safely clear UI state if the backend ever rejects a refresh token request down the line
     const responseInterceptor = api.interceptors.response.use(
       (response) => response,
       (error) => {
