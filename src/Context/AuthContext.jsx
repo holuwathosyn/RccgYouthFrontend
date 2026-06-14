@@ -12,6 +12,7 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [admin, setAdmin] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
 
   // ======================
   // LOGIN
@@ -23,7 +24,7 @@ export const AuthProvider = ({ children }) => {
       { withCredentials: true }
     );
 
-    setAdmin(res.data.admin); // ✅ update state only
+    setAdmin(res.data.admin);
     return res.data;
   };
 
@@ -37,11 +38,11 @@ export const AuthProvider = ({ children }) => {
       console.log(error);
     }
 
-    setAdmin(null); // ✅ clear state only
+    setAdmin(null);
   };
 
   // ======================
-  // REFRESH AUTH
+  // REFRESH AUTH (FIXED)
   // ======================
   const refreshAuth = async () => {
     try {
@@ -51,9 +52,11 @@ export const AuthProvider = ({ children }) => {
 
       setAdmin(res.data.admin);
     } catch (error) {
+      // IMPORTANT: only clear if truly unauthorized
       setAdmin(null);
     } finally {
       setLoading(false);
+      setInitializing(false);
     }
   };
 
@@ -66,6 +69,7 @@ export const AuthProvider = ({ children }) => {
       value={{
         admin,
         loading,
+        initializing,
         login,
         logout,
         refreshAuth,
