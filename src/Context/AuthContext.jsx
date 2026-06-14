@@ -1,127 +1,101 @@
-import {
-createContext,
-useContext,
-useEffect,
-useState,
-} from "react";
-
-import api from "../api/api";
+import { createContext, useContext, useEffect, useState } from "react";
+import api, { setLocalAccessToken } from "../api/api";
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-const [admin, setAdmin] = useState(null);
-const [loading, setLoading] = useState(true);
-const [initializing, setInitializing] = useState(true);
+  const [admin, setAdmin] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-// ======================
-// LOGIN
-// ======================
-const login = async (email, password) => {
-const res = await api.post(
-"/admin/login",
-{ email, password },
-{ withCredentials: true }
-);
-
-const adminData = res.data.admin;
-
-setAdmin(adminData);
-
-// Save admin info locally
-localStorage.setItem(
-  "admin",
-  JSON.stringify(adminData)
-);
-
-return res.data;
-
-
-};
-
-// ======================
-// LOGOUT
-// ======================
-const logout = async () => {
-try {
-await api.post(
-"/admin/logout",
-{},
-{ withCredentials: true }
-);
-} catch (error) {
-console.log(error);
-}
-
-setAdmin(null);
-localStorage.removeItem("admin");
-
-
-};
-
-// ======================
-// REFRESH AUTH
-// ======================
-const refreshAuth = async () => {
-try {
-const res = await api.get("/admin/me", {
-withCredentials: true,
-});
-
-
-  const adminData = res.data.admin;
-
-  setAdmin(adminData);
-
-  localStorage.setItem(
-    "admin",
-    JSON.stringify(adminData)
-  );
-} catch (error) {
-  // Fallback to localStorage
-  const storedAdmin = localStorage.getItem("admin");
-
-  if (storedAdmin) {
-    setAdmin(JSON.parse(storedAdmin));
-  } else {
+  // ======================
+  // CLEAR AUTH
+  // ======================
+  const clearAuthData = () => {
     setAdmin(null);
-  }
-} finally {
-  setLoading(false);
-  setInitializing(false);
-}
+    setLocalAccessToken(null);
+  };
 
+  // ======================
+  // LOGIN
+  // ======================
+  const login = async (email, password) => {
+    setLoading(true);
+    try {
+      const res = await api.post(
+        "/admin/login",
+        { email, password },
+        { withCredentials: true }
+      );
 
-};
+      // backend should return admin only
+      setAdmin(res.data.admin);
 
-useEffect(() => {
-refreshAuth();
-}, []);
+      return res.data;
+    } finally {
+      setLoading(false);
+    }
+  };
 
-return (
-<AuthContext.Provider
-value={{
-admin,
-loading,
-initializing,
-login,
-logout,
-refreshAuth,
-}}
->
-{children}
-</AuthContext.Provider>
-);
+  // ======================
+  // LOGOUT
+  // ======================
+  const logout = async () => {
+    setLoading(true);
+    try {
+      await api.post("/admin/logout", {}, { withCredentials: true });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      clearAuthData();
+      setLoading(false);
+    }
+  };
+
+  // ======================
+  // CHECK AUTH (FIXED)
+  // ======================
+  const checkAuth = async () => {
+    setLoading(true);
+
+    try {
+      const res = await api.get("/admin/me", {
+        withCredentials: true,
+      });
+
+      setAdmin(res.data.admin || null);
+    } catch (error) {
+      clearAuthData();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ======================
+  // INIT
+  // ======================
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  return (
+    <AuthContext.Provider
+      value={{
+        admin,
+        loading,
+        login,
+        logout,
+        checkAuth,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {
-const context = useContext(AuthContext);
-
-if (!context) {
-throw new Error(
-"useAuth must be used inside AuthProvider"
-);
-}
-
-return context;
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used inside AuthProvider");
+  }
+  return context;
 };

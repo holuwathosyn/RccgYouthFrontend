@@ -1,82 +1,111 @@
 import axios from "axios";
 
 // ===========================
-// MAIN API INSTANCE
+// BASE API
 // ===========================
 const api = axios.create({
-  baseURL: "https://api-rccgyouthgloryofgod.onrender.com/api",
+  baseURL:  "https://api-rccgyouthgloryofgod.onrender.com/api",
   withCredentials: true,
 });
 
 // ===========================
-// REFRESH INSTANCE (NO INTERCEPTOR)
+// REFRESH API
 // ===========================
 const refreshApi = axios.create({
-  baseURL: "https://api-rccgyouthgloryofgod.onrender.com/api",
+  baseURL:  "https://api-rccgyouthgloryofgod.onrender.com/api",
   withCredentials: true,
 });
 
 // ===========================
-// FLAG (PREVENT MULTIPLE REFRESH CALLS)
+// MEMORY TOKEN
+// ===========================
+let accessToken = null;
+
+export const setAccessToken = (token) => {
+  accessToken = token;
+};
+
+// attach token
+api.interceptors.request.use((config) => {
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+  return config;
+});
+
+// ===========================
+// REFRESH STATE
 // ===========================
 let isRefreshing = false;
-let failedQueue = [];
+let queue = [];
 
-// process queue after refresh
-const processQueue = (error = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) prom.reject(error);
-    else prom.resolve();
+const processQueue = (error, token = null) => {
+  queue.forEach((p) => {
+    if (error) {
+      p.reject(error);
+    } else {
+      p.resolve(token);
+    }
   });
 
-  failedQueue = [];
+  queue = [];
 };
 
 // ===========================
-// INTERCEPTOR
+// RESPONSE INTERCEPTOR
 // ===========================
 api.interceptors.response.use(
-  (response) => response,
+  (res) => res,
 
   async (error) => {
-    const originalRequest = error.config;
+    const original = error.config;
 
-    if (error.response?.status !== 401) {
+    if (!error.response || error.response.status !== 401) {
       return Promise.reject(error);
     }
 
-    // prevent infinite retry
-    if (originalRequest._retry) {
+    if (original._retry) {
       return Promise.reject(error);
     }
 
-    originalRequest._retry = true;
+    original._retry = true;
 
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
-        failedQueue.push({
-          resolve: () => resolve(api(originalRequest)),
-          reject,
-        });
+        queue.push({ resolve, reject });
+      }).then((token) => {
+        original.headers.Authorization = `Bearer ${token}`;
+        return api(original);
       });
     }
 
     isRefreshing = true;
 
     try {
-      // refresh token
-      await refreshApi.post("/admin/refresh-token");
+      const res = await refreshApi.post("/admin/refresh-token");
 
-      processQueue();
+      const newToken = res.data?.newAccessToken;
 
-      return api(originalRequest);
-    } catch (refreshError) {
-      processQueue(refreshError);
+      if (!newToken) {
+        throw new Error("No access token returned");
+      }
 
-      // force logout behavior
-      return Promise.reject(refreshError);
-    } finally {
+      setAccessToken(newToken);
+
       isRefreshing = false;
+      processQueue(null, newToken);
+
+      original.headers.Authorization = `Bearer ${newToken}`;
+      return api(original);
+
+    } catch (err) {
+      isRefreshing = false;
+      processQueue(err, null);
+
+      setAccessToken(null);
+      localStorage.removeItem("isLoggedIn");
+
+      return Promise.reject(err);
     }
   }
 );
