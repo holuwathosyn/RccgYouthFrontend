@@ -2,8 +2,6 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
-  Mail,
-  Lock,
   Eye,
   EyeOff,
   ShieldCheck,
@@ -26,18 +24,31 @@ export default function Login() {
   const [errors, setErrors] = useState({});
 
   const handleChange = (e) => {
-    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
-    setErrors((p) => ({ ...p, [e.target.name]: "" }));
+    setForm((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
+
+    setErrors((prev) => ({
+      ...prev,
+      [e.target.name]: "",
+    }));
   };
 
   const validate = () => {
-    const err = {};
+    const newErrors = {};
 
-    if (!form.email.trim()) err.email = "Email is required";
-    if (!form.password.trim()) err.password = "Password is required";
+    if (!form.email.trim()) {
+      newErrors.email = "Email is required";
+    }
 
-    setErrors(err);
-    return Object.keys(err).length === 0;
+    if (!form.password.trim()) {
+      newErrors.password = "Password is required";
+    }
+
+    setErrors(newErrors);
+
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
@@ -46,27 +57,32 @@ export default function Login() {
     if (loading) return;
 
     if (!validate()) {
-      toast.error("Fill all required fields");
+      toast.error("Please fill all required fields");
       return;
     }
 
     setLoading(true);
 
     try {
-      // 🔥 IMPORTANT: use context login
-      const res = await login(form.email, form.password);
+      const res = await login(
+        form.email.trim(),
+        form.password
+      );
 
-      if (!res?.success) {
+      if (res?.success) {
+        toast.success("Login successful");
+
+        navigate("/admin/home", {
+          replace: true,
+        });
+      } else {
         toast.error(res?.message || "Login failed");
-        return;
       }
-
-      toast.success("Login successful");
-
-      // 🔥 immediate navigation (NO delay needed anymore)
-      navigate("/admin/home", { replace: true });
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Login error");
+    } catch (error) {
+      toast.error(
+        error?.response?.data?.message ||
+          "Unable to login"
+      );
     } finally {
       setLoading(false);
     }
@@ -74,7 +90,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6 relative">
-
       {loading && (
         <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white p-5 rounded-xl flex items-center gap-3">
@@ -85,32 +100,43 @@ export default function Login() {
       )}
 
       <div className="w-full max-w-md">
-
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-red-600 rounded-full mx-auto flex items-center justify-center text-white">
             <ShieldCheck size={38} />
           </div>
+
           <h1 className="mt-4 text-2xl font-bold">
             RCCG Glory of God
           </h1>
+
+          <p className="text-gray-500 mt-2">
+            Admin Portal
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl space-y-5">
-
-          {/* Email */}
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white p-8 rounded-2xl shadow-md space-y-5"
+        >
+          {/* EMAIL */}
           <div>
             <input
               type="email"
               name="email"
-              placeholder="Email"
+              placeholder="Email Address"
               value={form.email}
               onChange={handleChange}
-              className="w-full p-3 bg-gray-100 rounded-xl"
+              className="w-full p-3 bg-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-red-500"
             />
-            {errors.email && <p className="text-red-500">{errors.email}</p>}
+
+            {errors.email && (
+              <p className="text-red-500 text-sm mt-1">
+                {errors.email}
+              </p>
+            )}
           </div>
 
-          {/* Password */}
+          {/* PASSWORD */}
           <div className="relative">
             <input
               type={showPassword ? "text" : "password"}
@@ -118,32 +144,46 @@ export default function Login() {
               placeholder="Password"
               value={form.password}
               onChange={handleChange}
-              className="w-full p-3 bg-gray-100 rounded-xl pr-10"
+              className="w-full p-3 bg-gray-100 rounded-xl pr-12 outline-none focus:ring-2 focus:ring-red-500"
             />
 
             <button
               type="button"
-              onClick={() => setShowPassword(!showPassword)}
+              onClick={() =>
+                setShowPassword((prev) => !prev)
+              }
               className="absolute right-3 top-3 text-gray-500"
             >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showPassword ? (
+                <EyeOff size={18} />
+              ) : (
+                <Eye size={18} />
+              )}
             </button>
 
             {errors.password && (
-              <p className="text-red-500">{errors.password}</p>
+              <p className="text-red-500 text-sm mt-1">
+                {errors.password}
+              </p>
             )}
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-red-600 text-white p-3 rounded-xl"
+            className="w-full bg-red-600 hover:bg-red-700 transition text-white p-3 rounded-xl font-semibold disabled:opacity-70"
           >
             {loading ? "Logging in..." : "Login"}
           </button>
 
-          <p className="text-center text-sm">
-            Don't have account? <Link to="/signup">Signup</Link>
+          <p className="text-center text-sm text-gray-600">
+            Don't have an account?{" "}
+            <Link
+              to="/signup"
+              className="text-red-600 font-semibold"
+            >
+              Signup
+            </Link>
           </p>
         </form>
       </div>
