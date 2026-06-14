@@ -1,12 +1,23 @@
 import axios from "axios";
 
+// ===========================
+// MAIN API INSTANCE
+// ===========================
 const api = axios.create({
   baseURL: "https://api-rccgyouthgloryofgod.onrender.com/api",
   withCredentials: true,
 });
 
 // ===========================
-// AUTO REFRESH TOKEN
+// SEPARATE REFRESH INSTANCE (IMPORTANT)
+// ===========================
+const refreshApi = axios.create({
+  baseURL: "https://api-rccgyouthgloryofgod.onrender.com/api",
+  withCredentials: true,
+});
+
+// ===========================
+// AUTO REFRESH TOKEN INTERCEPTOR
 // ===========================
 api.interceptors.response.use(
   (response) => response,
@@ -14,6 +25,7 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Prevent infinite loop
     if (
       error.response?.status === 401 &&
       !originalRequest._retry
@@ -21,17 +33,14 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        await api.post(
-          "/admin/refresh-token",
-          {},
-          {
-            withCredentials: true,
-          }
-        );
+        // 🔥 use SAFE instance (NO interceptor)
+        await refreshApi.post("/admin/refresh-token");
 
-        // Retry original request
+        // retry original request
         return api(originalRequest);
+
       } catch (refreshError) {
+        // if refresh fails → force logout
         return Promise.reject(refreshError);
       }
     }
