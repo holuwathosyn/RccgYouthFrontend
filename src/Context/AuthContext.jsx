@@ -57,7 +57,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   // ======================
-  // CHECK AUTH (CLEAN + RELIABLE)
+  // CHECK AUTH + AUTO REFRESH FIX
   // ======================
   const checkAuth = async () => {
     try {
@@ -75,8 +75,30 @@ export const AuthProvider = ({ children }) => {
 
       localStorage.setItem("isLoggedIn", "true");
     } catch (error) {
-      console.log("Auth check failed:", error?.response?.data);
-      clearAuthData();
+      try {
+        // 🔥 AUTO REFRESH FALLBACK
+        const refresh = await api.post(
+          "/admin/refresh",
+          {},
+          { withCredentials: true }
+        );
+
+        if (refresh.data?.accessToken) {
+          setAccessToken(refresh.data.accessToken);
+
+          const retry = await api.get("/admin/me", {
+            withCredentials: true,
+          });
+
+          setAdmin(retry.data.admin);
+          localStorage.setItem("isLoggedIn", "true");
+          return;
+        }
+
+        clearAuthData();
+      } catch (err) {
+        clearAuthData();
+      }
     } finally {
       setLoading(false);
     }

@@ -4,7 +4,7 @@ import { useAuth } from "./AuthContext";
 export default function ProtectedRoute({ children }) {
   const { admin, loading } = useAuth();
 
-  // ✅ IMPORTANT: SHOW LOADING STATE INSTEAD OF NULL
+  // LOADING SCREEN
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -13,11 +13,11 @@ export default function ProtectedRoute({ children }) {
     );
   }
 
-  // 🚫 NOT AUTHENTICATED
+  // NOT LOGGED IN
   if (!admin) {
     return <Navigate to="/login" replace />;
   }
 
-  // ✅ AUTHENTICATED
+  // AUTHORIZED
   return children;
 }
