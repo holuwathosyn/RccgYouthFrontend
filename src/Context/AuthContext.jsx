@@ -48,8 +48,6 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       await api.post("/admin/logout", {}, { withCredentials: true });
-    } catch (error) {
-      console.error(error);
     } finally {
       clearAuthData();
       setLoading(false);
@@ -57,45 +55,49 @@ export const AuthProvider = ({ children }) => {
   };
 
   // ======================
-  // CHECK AUTH + AUTO REFRESH FIX
+  // CHECK AUTH (FIXED FLOW)
   // ======================
   const checkAuth = async () => {
-    try {
-      setLoading(true);
+    setLoading(true);
 
+    try {
+      // 1. TRY NORMAL SESSION
       const res = await api.get("/admin/me", {
         withCredentials: true,
       });
 
-      setAdmin(res.data.admin || null);
-
-      if (res.data?.accessToken) {
-        setAccessToken(res.data.accessToken);
+      if (res.data?.admin) {
+        setAdmin(res.data.admin);
+        if (res.data?.accessToken) {
+          setAccessToken(res.data.accessToken);
+        }
+        localStorage.setItem("isLoggedIn", "true");
+        return;
       }
 
-      localStorage.setItem("isLoggedIn", "true");
+      throw new Error("No admin returned");
     } catch (error) {
       try {
-        // 🔥 AUTO REFRESH FALLBACK
+        // 2. TRY REFRESH (ONLY IF /ME FAILS)
         const refresh = await api.post(
           "/admin/refresh",
           {},
           { withCredentials: true }
         );
 
-        if (refresh.data?.accessToken) {
-          setAccessToken(refresh.data.accessToken);
+        const newToken = refresh.data?.accessToken;
 
-          const retry = await api.get("/admin/me", {
-            withCredentials: true,
-          });
+        if (!newToken) throw new Error("No refresh token");
 
-          setAdmin(retry.data.admin);
-          localStorage.setItem("isLoggedIn", "true");
-          return;
-        }
+        setAccessToken(newToken);
 
-        clearAuthData();
+        // 3. RETRY /ME AFTER REFRESH
+        const retry = await api.get("/admin/me", {
+          withCredentials: true,
+        });
+
+        setAdmin(retry.data.admin);
+        localStorage.setItem("isLoggedIn", "true");
       } catch (err) {
         clearAuthData();
       }
